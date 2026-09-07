@@ -1,28 +1,53 @@
 {
     "cases": [
       {
-        "id": "case_1",
-        "type": "corroboration",
-        "status": "todo",
-        "description": "Find two documents reporting the same Delhivery FY24 revenue using different units or representations."
+        "id": "corroboration_revenue",
+        "type": "CORROBORATES",
+        "description": "Delhivery FY24 revenue appears in Annual Report in INR million and Earnings Presentation in INR crore.",
+        "documents": [
+          "01-delhivery-annual-report-fy24-excerpt.pdf",
+          "03-delhivery-q4-fy24-earnings-presentation.pdf"
+        ],
+        "expected": {
+          "relationship": "CORROBORATES",
+          "reason": "81415 INR million equals approximately 8142 INR crore after unit conversion and rounding."
+        }
       },
       {
-        "id": "case_2",
-        "type": "contradiction",
-        "status": "todo",
-        "description": "Find two genuinely inconsistent facts or competing claims."
+        "id": "contextual_workforce",
+        "type": "RECONCILED",
+        "description": "Delhivery reports team size and workforce strength using different scopes.",
+        "documents": [
+          "02-delhivery-annual-report-fy24-excerpt.pdf",
+          "03-delhivery-q4-fy24-earnings-presentation.pdf"
+        ],
+        "expected": {
+          "relationship": "RECONCILED",
+          "reason": "63713 team members plus 34422 partner agents equals 98135 workforce strength."
+        }
       },
       {
-        "id": "case_3",
-        "type": "contextual_difference",
-        "status": "todo",
-        "description": "Find two apparently different facts whose difference is explained by time, scope, units, definitions, or another qualifier."
+        "id": "macro_forecast_difference",
+        "type": "LIKELY_DISAGREEMENT",
+        "description": "RBI and IMF provide slightly different FY2025-26 GDP growth forecasts.",
+        "documents": [
+          "01-india-economic-survey-2024-25-excerpt.pdf",
+          "02-rbi-annual-report-2024-25-excerpt.pdf",
+          "03-imf-india-2025-article-iv-excerpt.pdf"
+        ],
+        "expected": {
+          "relationship": "LIKELY_DISAGREEMENT",
+          "reason": "RBI projects 6.5 percent and IMF projects 6.6 percent for FY2025-26."
+        }
       },
       {
-        "id": "case_4",
-        "type": "extraction_failure",
-        "status": "todo",
-        "description": "Find an extraction failure, especially involving tables, columns, footnotes, or context."
+        "id": "extraction_failure",
+        "type": "EXTRACTION_FAILURE",
+        "description": "Test handling of a table where naive extraction can misassociate values with columns.",
+        "expected": {
+          "relationship": "UNRESOLVED",
+          "reason": "System should avoid asserting a fact when table structure or evidence cannot be reliably interpreted."
+        }
       }
     ]
   }
