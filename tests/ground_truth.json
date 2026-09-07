@@ -1,0 +1,28 @@
+{
+    "cases": [
+      {
+        "id": "case_1",
+        "type": "corroboration",
+        "status": "todo",
+        "description": "Find two documents reporting the same Delhivery FY24 revenue using different units or representations."
+      },
+      {
+        "id": "case_2",
+        "type": "contradiction",
+        "status": "todo",
+        "description": "Find two genuinely inconsistent facts or competing claims."
+      },
+      {
+        "id": "case_3",
+        "type": "contextual_difference",
+        "status": "todo",
+        "description": "Find two apparently different facts whose difference is explained by time, scope, units, definitions, or another qualifier."
+      },
+      {
+        "id": "case_4",
+        "type": "extraction_failure",
+        "status": "todo",
+        "description": "Find an extraction failure, especially involving tables, columns, footnotes, or context."
+      }
+    ]
+  }
