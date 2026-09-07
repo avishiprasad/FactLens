@@ -1,23 +1,34 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any
 
+
 class Evidence(BaseModel):
+
     document_id: str
+
     page_number: int
+
     text: str
+
+    verified: bool = False
 
 
 class Fact(BaseModel):
+
     id: str
 
     subject: str
+
     predicate: str
 
     value: Any
+
     value_type: str
 
     unit: Optional[str] = None
+
     period: Optional[str] = None
+
     scope: Optional[str] = None
 
     evidence: Evidence
