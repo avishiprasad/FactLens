@@ -8,22 +8,32 @@ UNIT_MULTIPLIERS = {
 
     "inr thousand": Decimal("1000"),
     "₹ thousand": Decimal("1000"),
+    "thousand": Decimal("1000"),
+    "k": Decimal("1000"),
 
     "inr million": Decimal("1000000"),
     "₹ million": Decimal("1000000"),
+    "million": Decimal("1000000"),
+    "mn": Decimal("1000000"),
 
     "inr billion": Decimal("1000000000"),
     "₹ billion": Decimal("1000000000"),
+    "billion": Decimal("1000000000"),
+    "bn": Decimal("1000000000"),
 
     "inr crore": Decimal("10000000"),
     "₹ crore": Decimal("10000000"),
-
+    "inr cr": Decimal("10000000"),
+    "₹ cr": Decimal("10000000"),
+    "cr": Decimal("10000000"),
     "crore": Decimal("10000000"),
 
     "inr lakh": Decimal("100000"),
     "₹ lakh": Decimal("100000"),
-
-    "lakh": Decimal("100000")
+    "inr lac": Decimal("100000"),
+    "₹ lac": Decimal("100000"),
+    "lakh": Decimal("100000"),
+    "lac": Decimal("100000")
 }
 
 

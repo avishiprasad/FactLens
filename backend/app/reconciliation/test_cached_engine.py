@@ -1,38 +1,25 @@
-from app.extraction.document_processor import process_document
-from app.reconciliation.matcher import find_matching_facts
-from app.reconciliation.engine import classify_relationship
-
-
-ANNUAL_REPORT = (
-    "../data/docs/delhivery/"
-    "02-delhivery-annual-report-fy24-excerpt.pdf"
+from app.reconciliation.fixtures import (
+    ANNUAL_REPORT_FACTS,
+    PRESENTATION_FACTS,
 )
 
-EARNINGS_PRESENTATION = (
-    "../data/docs/delhivery/"
-    "03-delhivery-q4-fy24-earnings-presentation.pdf"
+from app.reconciliation.matcher import (
+    find_matching_facts,
 )
 
-
-annual_facts = process_document(
-    ANNUAL_REPORT,
-    pages_to_process=[6]
-)
-
-presentation_facts = process_document(
-    EARNINGS_PRESENTATION,
-    pages_to_process=[9]
+from app.reconciliation.engine import (
+    classify_relationship,
 )
 
 
 matches = find_matching_facts(
-    annual_facts,
-    presentation_facts
+    ANNUAL_REPORT_FACTS,
+    PRESENTATION_FACTS
 )
 
 
 print("\n================================")
-print("MATCHES")
+print("CACHED FACT RECONCILIATION")
 print("================================\n")
 
 
@@ -63,7 +50,7 @@ for match in matches:
 
     print(
         "\nPredicate similarity:",
-        round(match["predicate_similarity"], 3)
+        match["predicate_similarity"]
     )
 
     relationship = classify_relationship(
@@ -72,28 +59,23 @@ for match in matches:
     )
 
     print(
-        "\nRelationship:",
+        "Relationship:",
         relationship["relationship"]
     )
 
     print(
-        "Confidence:",
-        relationship["confidence"]
-    )
-
-    print(
         "Normalized A:",
-        relationship["normalized_value_a"]
+        relationship.get("normalized_value_a")
     )
 
     print(
         "Normalized B:",
-        relationship["normalized_value_b"]
+        relationship.get("normalized_value_b")
     )
 
     print(
         "Relative difference:",
-        relationship["relative_difference"]
+        relationship.get("relative_difference")
     )
 
     print(
