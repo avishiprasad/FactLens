@@ -12,6 +12,13 @@ GENERIC_WORDS = {
     "growth",
     "rate",
     "number",
+    "projected",
+    "expected",
+    "under",
+    "baseline",
+    "scenario",
+    "approximately",
+    "approximate",
 }
 
 
@@ -27,6 +34,13 @@ STOPWORDS = {
     "a",
     "an",
     "during",
+    "at",
+    "is",
+    "was",
+    "were",
+    "with",
+    "by",
+    "over",
 }
 
 
@@ -84,8 +98,37 @@ def specific_words(value: str) -> set:
     }
 
 
-def detect_metric_type(predicate: str) -> str:
-    words = set(predicate.lower().split())
+def build_metric_text(fact: Dict) -> str:
+    """
+    Build a semantic metric representation using both
+    subject and predicate.
+
+    This handles cases where an LLM places the metric
+    inconsistently between subject and predicate.
+
+    Example:
+
+        RBI:
+        subject   = "real GDP growth"
+        predicate = "projected at"
+
+        IMF:
+        subject   = "India"
+        predicate = "projected real GDP growth under baseline scenario"
+
+    Both become comparable metric representations.
+    """
+
+    subject = fact.get("canonical_subject", "")
+    predicate = fact.get("canonical_predicate", "")
+
+    combined = f"{subject} {predicate}".strip()
+
+    return combined
+
+
+def detect_metric_type(text: str) -> str:
+    words = set(text.lower().split())
 
     detected_types = []
 
@@ -104,12 +147,12 @@ def detect_metric_type(predicate: str) -> str:
 
 
 def metric_types_compatible(
-    predicate_a: str,
-    predicate_b: str
+    metric_a: str,
+    metric_b: str
 ) -> bool:
 
-    type_a = detect_metric_type(predicate_a)
-    type_b = detect_metric_type(predicate_b)
+    type_a = detect_metric_type(metric_a)
+    type_b = detect_metric_type(metric_b)
 
     if type_a != "unknown" and type_b != "unknown":
         return type_a == type_b
@@ -141,17 +184,6 @@ def predicate_similarity(
 
     if not specific_intersection:
         return 0.0
-
-    # For metric phrases such as:
-    #
-    # "Express parcel shipment volume"
-    # "Express Parcel shipments"
-    #
-    # we use the overlap of the specific metric words
-    # relative to the smaller phrase.
-    #
-    # This allows one phrase to contain an additional
-    # descriptive word without creating false matches.
 
     denominator = min(
         len(specific_a),
@@ -188,15 +220,22 @@ def facts_match_semantically(
     fact_a = canonicalize_fact(fact_a)
     fact_b = canonicalize_fact(fact_b)
 
+    # Period must match.
     if not same_period(
         fact_a,
         fact_b
     ):
         return False
 
+    # IMPORTANT:
+    # Use both subject and predicate because LLMs may
+    # place the metric in either field.
+    metric_a = build_metric_text(fact_a)
+    metric_b = build_metric_text(fact_b)
+
     similarity = predicate_similarity(
-        fact_a["canonical_predicate"],
-        fact_b["canonical_predicate"]
+        metric_a,
+        metric_b
     )
 
     return similarity >= similarity_threshold
@@ -221,9 +260,17 @@ def find_matching_facts(
                 original_b
             )
 
+            metric_a = build_metric_text(
+                fact_a
+            )
+
+            metric_b = build_metric_text(
+                fact_b
+            )
+
             similarity = predicate_similarity(
-                fact_a["canonical_predicate"],
-                fact_b["canonical_predicate"]
+                metric_a,
+                metric_b
             )
 
             if facts_match_semantically(

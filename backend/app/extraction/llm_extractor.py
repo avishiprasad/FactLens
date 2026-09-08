@@ -35,7 +35,7 @@ client = genai.Client(
 )
 
 
-PRIMARY_MODEL = "gemini-3.6-flash"
+PRIMARY_MODEL = "gemini-3.5-flash"
 
 
 # ---------------------------------------------------------
