@@ -26,23 +26,37 @@ def list_relationships(
         for membership in relationship.facts:
 
             fact = membership.fact
+            page = fact.page
+            document = page.document
 
             facts.append({
                 "fact_id": fact.id,
                 "role": membership.role,
+
                 "subject": fact.subject,
                 "predicate": fact.predicate,
+
                 "value": fact.value,
                 "value_type": fact.value_type,
                 "unit": fact.unit,
+
                 "period": fact.period,
                 "scope": fact.scope,
+
                 "confidence": fact.confidence,
-                "evidence_text": fact.evidence_text,
-                "evidence_verified": bool(
-                    fact.evidence_verified
-                ),
-                "page_id": fact.page_id,
+
+                "evidence": {
+                    "text": fact.evidence_text,
+                    "verified": bool(
+                        fact.evidence_verified
+                    ),
+                },
+
+                "source": {
+                    "document_id": document.document_id,
+                    "filename": document.filename,
+                    "page": page.page_number,
+                },
             })
 
         results.append({

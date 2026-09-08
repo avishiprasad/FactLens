@@ -23,11 +23,13 @@ def create_relationship(
     )
 
     db.add(relationship)
+
+    # Get an ID before creating association rows.
     db.flush()
 
     for fact_data in facts:
 
-        relationship_fact = RelationshipFact(
+        membership = RelationshipFact(
             relationship_id=relationship.id,
             fact_id=fact_data["fact_id"],
             role=fact_data.get(
@@ -36,7 +38,7 @@ def create_relationship(
             ),
         )
 
-        db.add(relationship_fact)
+        db.add(membership)
 
     db.commit()
     db.refresh(relationship)
@@ -44,9 +46,13 @@ def create_relationship(
     return relationship
 
 
-def get_all_relationships(db: Session):
+def get_all_relationships(
+    db: Session,
+):
     return (
         db.query(FactRelationship)
-        .order_by(FactRelationship.id.desc())
+        .order_by(
+            FactRelationship.id.desc()
+        )
         .all()
     )

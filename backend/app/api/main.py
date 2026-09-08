@@ -1,8 +1,11 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import documents
-from app.api.routes import facts
-from app.api.routes import relationships
+from app.api.routes import (
+    documents,
+    facts,
+    relationships,
+)
 
 
 app = FastAPI(
@@ -15,28 +18,40 @@ app = FastAPI(
 )
 
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/health")
 def health_check():
     return {
         "status": "ok",
-        "service": "FactLens API"
+        "service": "FactLens API",
     }
 
 
 app.include_router(
     documents.router,
     prefix="/documents",
-    tags=["Documents"]
+    tags=["Documents"],
 )
 
 app.include_router(
     facts.router,
     prefix="/facts",
-    tags=["Facts"]
+    tags=["Facts"],
 )
 
 app.include_router(
     relationships.router,
     prefix="/relationships",
-    tags=["Relationships"]
+    tags=["Relationships"],
 )

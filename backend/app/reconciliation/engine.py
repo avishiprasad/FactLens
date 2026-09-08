@@ -1,123 +1,134 @@
-from typing import Dict
+from decimal import Decimal
+from typing import Dict, List
 
+from app.extraction.evidence import verify_evidence
 from app.reconciliation.normalizer import normalize_value
-from app.reconciliation.comparator import (
-    relative_difference,
-    values_are_close,
-)
+
+
+def unresolved(
+    explanation: str,
+    confidence: float = 0.30,
+) -> Dict:
+    """
+    Every classification path returns the same schema.
+    This prevents downstream KeyError failures.
+    """
+
+    return {
+        "relationship_type": "UNRESOLVED",
+        "confidence": confidence,
+        "explanation": explanation,
+    }
 
 
 def classify_relationship(
     fact_a: Dict,
-    fact_b: Dict
+    fact_b: Dict,
 ) -> Dict:
 
-    # --------------------------------------------------
-    # 1. Check whether evidence is trustworthy
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # 1. Evidence validation
+    # ---------------------------------------------------------
 
-    evidence_a = fact_a.get(
-        "evidence_verified",
-        True
-    )
+    evidence_a = fact_a.get("evidence_text", "")
+    evidence_b = fact_b.get("evidence_text", "")
 
-    evidence_b = fact_b.get(
-        "evidence_verified",
-        True
-    )
+    page_text_a = fact_a.get("page_text", "")
+    page_text_b = fact_b.get("page_text", "")
 
-    if not evidence_a or not evidence_b:
-
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": (
-                "At least one fact could not be reliably "
-                "verified against its source evidence."
+    # If page text is available, verify evidence against it.
+    if page_text_a and evidence_a:
+        if not verify_evidence(page_text_a, evidence_a):
+            return unresolved(
+                "Fact A could not be grounded in its source evidence."
             )
-        }
 
-    # --------------------------------------------------
-    # 2. Check for missing numerical values
-    # --------------------------------------------------
-
-    if fact_a.get("value") is None or fact_b.get("value") is None:
-
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": (
-                "One or both facts do not contain a reliable "
-                "numerical value."
+    if page_text_b and evidence_b:
+        if not verify_evidence(page_text_b, evidence_b):
+            return unresolved(
+                "Fact B could not be grounded in its source evidence."
             )
-        }
 
-    # --------------------------------------------------
+    # Also respect the stored verification flag.
+    if fact_a.get("evidence_verified") is False:
+        return unresolved(
+            "Fact A has unverified source evidence."
+        )
+
+    if fact_b.get("evidence_verified") is False:
+        return unresolved(
+            "Fact B has unverified source evidence."
+        )
+
+    # ---------------------------------------------------------
+    # 2. Required values
+    # ---------------------------------------------------------
+
+    value_a = fact_a.get("value")
+    value_b = fact_b.get("value")
+
+    if value_a in (None, "") or value_b in (None, ""):
+        return unresolved(
+            "One or both facts are missing a numerical value."
+        )
+
+    # ---------------------------------------------------------
     # 3. Normalize units
-    # --------------------------------------------------
+    # ---------------------------------------------------------
 
     try:
-
-        value_a = normalize_value(
-            fact_a["value"],
-            fact_a.get("unit")
+        normalized_a = normalize_value(
+            value_a,
+            fact_a.get("unit"),
         )
 
-        value_b = normalize_value(
-            fact_b["value"],
-            fact_b.get("unit")
+        normalized_b = normalize_value(
+            value_b,
+            fact_b.get("unit"),
         )
 
-    except ValueError as error:
+    except (ValueError, TypeError, ArithmeticError) as error:
 
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.40,
-            "reason": (
-                "The values could not be normalized because "
-                "one of the units is unsupported: "
-                + str(error)
-            )
-        }
+        return unresolved(
+            "The facts could not be compared because their units "
+            f"could not be normalized: {error}"
+        )
 
-    # --------------------------------------------------
-    # 4. Compare normalized values
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # 4. Same normalized value
+    # ---------------------------------------------------------
 
-    difference = relative_difference(
-        value_a,
-        value_b
+    denominator = max(
+        abs(normalized_a),
+        abs(normalized_b),
     )
 
-    close = values_are_close(
-        value_a,
-        value_b,
-        tolerance=0.01
-    )
+    if denominator == 0:
 
-    # --------------------------------------------------
-    # 5. Exact / near-exact agreement
-    # --------------------------------------------------
+        relative_difference = Decimal("0")
 
-    if close:
+    else:
+
+        relative_difference = (
+            abs(normalized_a - normalized_b)
+            / denominator
+        )
+
+    # 1% tolerance handles rounding differences.
+    if relative_difference <= Decimal("0.01"):
 
         return {
-            "relationship": "CORROBORATES",
+            "relationship_type": "CORROBORATES",
             "confidence": 0.99,
-            "normalized_value_a": str(value_a),
-            "normalized_value_b": str(value_b),
-            "relative_difference": str(difference),
-            "reason": (
-                "The two documents describe the same fact "
-                "and period. Their values are consistent "
-                "after unit normalization within the "
-                "allowed tolerance."
-            )
+            "explanation": (
+                "The two facts report consistent values after "
+                "normalizing their units."
+            ),
         }
 
-    # --------------------------------------------------
-    # 6. Different scope
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # 5. Different scopes
+    # ---------------------------------------------------------
 
     scope_a = fact_a.get("scope")
     scope_b = fact_b.get("scope")
@@ -125,218 +136,200 @@ def classify_relationship(
     if scope_a and scope_b and scope_a != scope_b:
 
         return {
-            "relationship": "CONTEXTUAL_DIFFERENCE",
+            "relationship_type": "CONTEXTUAL_DIFFERENCE",
             "confidence": 0.85,
-            "normalized_value_a": str(value_a),
-            "normalized_value_b": str(value_b),
-            "relative_difference": str(difference),
-            "reason": (
-                "The values differ, but the facts explicitly "
-                "refer to different scopes."
-            )
+            "explanation": (
+                "The values differ, but the facts have different "
+                "scopes or definitions. The difference may therefore "
+                "be explained by context rather than a contradiction."
+            ),
         }
 
-    # --------------------------------------------------
-    # 7. Numerical disagreement
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # 6. Genuine contradiction
+    # ---------------------------------------------------------
 
     return {
-        "relationship": "CONTRADICTS",
+        "relationship_type": "CONTRADICTS",
         "confidence": 0.90,
-        "normalized_value_a": str(value_a),
-        "normalized_value_b": str(value_b),
-        "relative_difference": str(difference),
-        "reason": (
-            "The facts appear to describe the same "
-            "underlying metric and period, but their "
-            "normalized values differ beyond the "
-            "allowed tolerance."
-        )
+        "explanation": (
+            "The facts refer to the same metric and period but "
+            "their normalized values differ materially."
+        ),
     }
+
+
 def classify_contextual_reconciliation(
-    component_facts,
-    total_fact
-):
-    """
-    Determine whether multiple component facts reconcile
-    to a broader total despite having different scopes.
-    """
+    component_facts: List[Dict],
+    total_fact: Dict,
+) -> Dict:
 
     if not component_facts:
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": "No component facts were provided."
-        }
-
-    if not total_fact:
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": "No total fact was provided."
-        }
-
-    try:
-        component_values = [
-            normalize_value(
-                fact["value"],
-                fact.get("unit")
-            )
-            for fact in component_facts
-        ]
-
-        total_value = normalize_value(
-            total_fact["value"],
-            total_fact.get("unit")
+        return unresolved(
+            "No component facts were provided."
         )
 
-    except (ValueError, KeyError) as error:
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.40,
-            "reason": (
-                "The component values could not be normalized: "
-                + str(error)
+    total_value = total_fact.get("value")
+
+    if total_value in (None, ""):
+        return unresolved(
+            "The total fact is missing a value."
+        )
+
+    try:
+
+        total_normalized = normalize_value(
+            total_value,
+            total_fact.get("unit"),
+        )
+
+        component_sum = Decimal("0")
+
+        for fact in component_facts:
+
+            value = fact.get("value")
+
+            if value in (None, ""):
+                return unresolved(
+                    "A component fact is missing a value."
+                )
+
+            component_sum += normalize_value(
+                value,
+                fact.get("unit"),
             )
-        }
 
-    component_sum = sum(component_values)
+    except (ValueError, TypeError, ArithmeticError) as error:
 
-    difference = relative_difference(
-        component_sum,
-        total_value
+        return unresolved(
+            "The reconciliation could not be calculated because "
+            f"a value or unit could not be normalized: {error}"
+        )
+
+    denominator = max(
+        abs(total_normalized),
+        abs(component_sum),
     )
 
-    if values_are_close(
-        component_sum,
-        total_value,
-        tolerance=0.01
-    ):
+    if denominator == 0:
+
+        relative_difference = Decimal("0")
+
+    else:
+
+        relative_difference = (
+            abs(total_normalized - component_sum)
+            / denominator
+        )
+
+    if relative_difference <= Decimal("0.01"):
+
+        component_text = " + ".join(
+            str(fact.get("value"))
+            for fact in component_facts
+        )
+
         return {
-            "relationship": "RECONCILED",
+            "relationship_type": "RECONCILED",
             "confidence": 0.98,
-            "component_sum": str(component_sum),
-            "total_value": str(total_value),
-            "relative_difference": str(difference),
-            "reason": (
-                "The broader total is mathematically reconciled "
-                "by the component facts after unit normalization. "
-                "The apparent difference is explained by their "
-                "different scopes."
-            )
+            "explanation": (
+                f"The component values reconcile to the reported "
+                f"total: {component_text} = "
+                f"{total_fact.get('value')}. "
+                "The apparent difference is explained by the "
+                "different scopes of the component and total facts."
+            ),
         }
 
-    return {
-        "relationship": "UNRESOLVED",
-        "confidence": 0.45,
-        "component_sum": str(component_sum),
-        "total_value": str(total_value),
-        "relative_difference": str(difference),
-        "reason": (
-            "The component facts do not reconcile to the reported total."
-        )
-    }
+    return unresolved(
+        "The component facts do not mathematically reconcile "
+        "to the reported total.",
+        confidence=0.45,
+    )
+
+
 def classify_forecast_relationship(
     fact_a: Dict,
-    fact_b: Dict
+    fact_b: Dict,
 ) -> Dict:
-    """
-    Compare independently produced forecasts for the same
-    metric and period.
 
-    Small differences between forecasts are classified as
-    LIKELY_DISAGREEMENT rather than a hard contradiction.
-    """
+    value_a = fact_a.get("value")
+    value_b = fact_b.get("value")
 
-    if not fact_a.get("evidence_verified", True) or not fact_b.get(
-        "evidence_verified", True
-    ):
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": (
-                "At least one forecast could not be reliably "
-                "verified against its source evidence."
-            )
-        }
+    if value_a in (None, "") or value_b in (None, ""):
 
-    if fact_a.get("value") is None or fact_b.get("value") is None:
-        return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.30,
-            "reason": (
-                "One or both forecasts do not contain a reliable value."
-            )
-        }
+        return unresolved(
+            "One or both forecast facts are missing a value."
+        )
 
     try:
-        value_a = normalize_value(
-            fact_a["value"],
-            fact_a.get("unit")
+
+        normalized_a = normalize_value(
+            value_a,
+            fact_a.get("unit"),
         )
 
-        value_b = normalize_value(
-            fact_b["value"],
-            fact_b.get("unit")
+        normalized_b = normalize_value(
+            value_b,
+            fact_b.get("unit"),
         )
 
-    except (ValueError, KeyError) as error:
+    except (ValueError, TypeError, ArithmeticError) as error:
+
+        return unresolved(
+            "Forecast values could not be normalized: "
+            f"{error}"
+        )
+
+    denominator = max(
+        abs(normalized_a),
+        abs(normalized_b),
+    )
+
+    if denominator == 0:
+
+        relative_difference = Decimal("0")
+
+    else:
+
+        relative_difference = (
+            abs(normalized_a - normalized_b)
+            / denominator
+        )
+
+    if relative_difference <= Decimal("0.01"):
+
         return {
-            "relationship": "UNRESOLVED",
-            "confidence": 0.40,
-            "reason": (
-                "The forecast values could not be normalized: "
-                + str(error)
-            )
+            "relationship_type": "CORROBORATES",
+            "confidence": 0.99,
+            "explanation": (
+                "The independently produced forecasts are "
+                "effectively equal after normalization."
+            ),
         }
 
-    difference = relative_difference(value_a, value_b)
+    source_a = fact_a.get("scope")
+    source_b = fact_b.get("scope")
 
-    source_a = fact_a.get("scope", "")
-    source_b = fact_b.get("scope", "")
-
-    # Same forecast
-    if values_are_close(
-        value_a,
-        value_b,
-        tolerance=0.01
-    ):
-        return {
-            "relationship": "CORROBORATES",
-            "confidence": 0.98,
-            "normalized_value_a": str(value_a),
-            "normalized_value_b": str(value_b),
-            "relative_difference": str(difference),
-            "reason": (
-                "The independently reported forecasts are "
-                "consistent within the allowed tolerance."
-            )
-        }
-
-    # Different forecast values from independent sources
     if source_a and source_b and source_a != source_b:
+
         return {
-            "relationship": "LIKELY_DISAGREEMENT",
+            "relationship_type": "LIKELY_DISAGREEMENT",
             "confidence": 0.90,
-            "normalized_value_a": str(value_a),
-            "normalized_value_b": str(value_b),
-            "relative_difference": str(difference),
-            "reason": (
-                "The forecasts describe the same metric and period "
-                "but differ slightly because they are independently "
-                "produced by different sources. This is treated as "
-                "a likely disagreement rather than a hard contradiction."
-            )
+            "explanation": (
+                "Both forecasts describe the same metric and "
+                "period, but independently produced estimates "
+                f"differ: {value_a}% versus {value_b}%. "
+                "This is treated as a likely disagreement rather "
+                "than a hard contradiction."
+            ),
         }
 
     return {
-        "relationship": "CONTRADICTS",
+        "relationship_type": "CONTRADICTS",
         "confidence": 0.90,
-        "normalized_value_a": str(value_a),
-        "normalized_value_b": str(value_b),
-        "relative_difference": str(difference),
-        "reason": (
-            "The forecasts describe the same metric and period "
-            "but have materially different values."
-        )
+        "explanation": (
+            "The forecasts refer to the same metric and period "
+            "but differ materially."
+        ),
     }
