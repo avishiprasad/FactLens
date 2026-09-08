@@ -88,6 +88,12 @@ def generate_with_retry(
     Retryable errors:
     - 503 UNAVAILABLE
     - 429 RESOURCE_EXHAUSTED
+
+    Important:
+    A 429 caused by an exhausted daily quota will not
+    become successful simply by retrying immediately.
+    We still keep limited retries because 429 can also
+    represent temporary rate limiting.
     """
 
     for attempt in range(max_retries):
@@ -115,12 +121,9 @@ def generate_with_retry(
                 or "RESOURCE_EXHAUSTED" in error_text
             )
 
-            # Don't retry errors such as invalid requests,
-            # authentication errors, malformed requests, etc.
             if not is_retryable:
                 raise
 
-            # We have exhausted our retries.
             if attempt == max_retries - 1:
 
                 print(
@@ -149,6 +152,21 @@ def extract_facts(
     document_id: str,
     page_number: int
 ) -> List[dict]:
+    """
+    Extract facts using Gemini.
+
+    If Gemini fails or returns invalid output,
+    use the deterministic fallback extractor.
+
+    The fallback deliberately prefers returning
+    no fact over making an unsupported inference.
+    """
+
+    # Import here to avoid unnecessary dependency coupling
+    # and to keep the fallback independent from Gemini.
+    from app.extraction.fallback_extractor import (
+        extract_simple_facts
+    )
 
     user_prompt = f"""
 Extract meaningful facts from the following financial document page.
@@ -191,49 +209,82 @@ Rules:
 - If a table is ambiguous, return no fact rather than guessing.
 """
 
-
-    response = generate_with_retry(
-        contents=[
-            SYSTEM_PROMPT,
-            user_prompt
-        ]
-    )
-
-
-    content = response.text
-
-
     try:
+
+        # -------------------------------------------------
+        # Try Gemini
+        # -------------------------------------------------
+
+        response = generate_with_retry(
+            contents=[
+                SYSTEM_PROMPT,
+                user_prompt
+            ]
+        )
+
+        content = response.text
 
         result = json.loads(content)
 
-    except json.JSONDecodeError as error:
+        if not isinstance(result, dict):
+            raise RuntimeError(
+                "Gemini response was not a JSON object."
+            )
 
-        raise RuntimeError(
-            "Gemini returned invalid JSON.\n"
-            f"Response:\n{content}"
-        ) from error
-
-
-    if not isinstance(result, dict):
-
-        raise RuntimeError(
-            "Gemini response was not a JSON object."
+        facts = result.get(
+            "facts",
+            []
         )
 
+        if not isinstance(facts, list):
+            raise RuntimeError(
+                "Gemini response contains an invalid "
+                "'facts' field."
+            )
 
-    facts = result.get(
-        "facts",
-        []
-    )
+        # Mark successful LLM extraction.
+        for fact in facts:
+            fact["extraction_method"] = "llm"
 
+        return facts
 
-    if not isinstance(facts, list):
+    except Exception as error:
 
-        raise RuntimeError(
-            "Gemini response contains an invalid "
-            "'facts' field."
+        # -------------------------------------------------
+        # Gemini failed → deterministic fallback
+        # -------------------------------------------------
+
+        print(
+            "LLM extraction failed. "
+            "Using deterministic fallback."
         )
 
+        print(
+            f"Reason: {error}"
+        )
 
-    return facts
+        fallback_facts = extract_simple_facts(
+            text=text,
+            document_id=document_id,
+            page_number=page_number
+        )
+
+        if fallback_facts:
+
+            print(
+                f"Fallback extracted "
+                f"{len(fallback_facts)} fact(s)."
+            )
+
+            return fallback_facts
+
+        # -------------------------------------------------
+        # Nothing can be safely extracted.
+        # -------------------------------------------------
+
+        print(
+            "Fallback could not safely extract "
+            "any facts from this page."
+        )
+
+        return []
