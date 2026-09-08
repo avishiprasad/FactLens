@@ -33,7 +33,16 @@ UNIT_MULTIPLIERS = {
     "inr lac": Decimal("100000"),
     "₹ lac": Decimal("100000"),
     "lakh": Decimal("100000"),
-    "lac": Decimal("100000")
+    "lac": Decimal("100000"),
+
+    "people": Decimal("1"),
+"person": Decimal("1"),
+"employees": Decimal("1"),
+"agents": Decimal("1"),
+
+"percent": Decimal("1"),
+"%": Decimal("1"),
+"percentage": Decimal("1"),
 }
 
 

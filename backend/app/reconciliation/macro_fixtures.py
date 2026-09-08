@@ -1,0 +1,26 @@
+RBI_IMF_FACTS = [
+    {
+        "subject": "India",
+        "predicate": "Real GDP growth forecast",
+        "value": "6.5",
+        "value_type": "percentage",
+        "unit": "percent",
+        "period": "FY2025-26",
+        "scope": "RBI forecast",
+        "evidence_verified": True,
+        "document_id": "02-rbi-annual-report-2024-25-excerpt",
+        "page_number": 17,
+    },
+    {
+        "subject": "India",
+        "predicate": "Real GDP growth forecast",
+        "value": "6.6",
+        "value_type": "percentage",
+        "unit": "percent",
+        "period": "FY2025-26",
+        "scope": "IMF forecast",
+        "evidence_verified": True,
+        "document_id": "03-imf-india-2025-article-iv-excerpt",
+        "page_number": 13,
+    },
+]
